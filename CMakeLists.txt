@@ -8,7 +8,7 @@ add_compile_options(-std=c++14)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED)
-find_package(CUDA)
+find_package(CUDA REQUIRED)
 message("-- CUDA version: ${CUDA_VERSION}")
 message("-- CUDA include dirs: ${CUDA_INCLUDE_DIRS}")
 
@@ -32,7 +32,7 @@ find_library(NVONNXPARSER NAMES nvonnxparser)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
  INCLUDE_DIRS include
-#  LIBRARIES tensorrt_base
+ LIBRARIES tensorrt_base
 #  CATKIN_DEPENDS other_catkin_pkg
 #  DEPENDS system_lib
 )
@@ -53,5 +53,3 @@ include_directories(
 add_library(${PROJECT_NAME}
   src/TensorrtBase.cpp
 )
-
-
