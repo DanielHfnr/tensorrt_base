@@ -32,7 +32,18 @@ class Logger : public nvinfer1::ILogger
 public:
     void log(Severity severity, const char* msg) noexcept override
     {
-        if (severity != Severity::kINFO)
+        // kINFO will not get printed
+        if (severity == Severity::kINTERNAL_ERROR || severity == Severity::kERROR)
+        {
+            // Print in red
+            std::cout << "\033[1;31m" + std::string(msg) + "\033[0m" << std::endl;
+        }
+        else if (severity == Severity::kWARNING)
+        {
+            // Print in yellow
+            std::cout << "\033[1;33m" + std::string(msg) + "\033[0m" << std::endl;
+        }
+        else if (severity == Severity::kVERBOSE)
         {
             std::cout << msg << std::endl;
         }
@@ -139,6 +150,20 @@ protected:
     //!
     inline bool cudaAllocMapped(void** cpuPtr, void** gpuPtr, size_t size);
 
+    //!
+    //! \brief
+    //!
+    //! \param dims
+    //! \param elementSize
+    //!
+    //! \return
+    //!
+    inline size_t sizeDims(const nvinfer1::Dims& dims, const size_t elementSize = 1);
+
+    inline uint32_t GetNumInputLayers() const;
+
+    inline uint32_t GetNumOutputLayers() const;
+
 protected:
     nvinfer1::IRuntime* infer_;
     nvinfer1::ICudaEngine* engine_;
@@ -146,7 +171,6 @@ protected:
 
     std::string onnx_model_path_;
     std::string cache_engine_path_;
-    std::string checksum_path_;
     PrecisionType precision_;
     DeviceType device_;
     bool allow_gpu_fallback_;

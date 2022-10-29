@@ -57,6 +57,7 @@ add_library(${PROJECT_NAME}
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
+  ${CUDA_LIBRARIES}
   nvinfer
   nvinfer_plugin
   nvonnxparser

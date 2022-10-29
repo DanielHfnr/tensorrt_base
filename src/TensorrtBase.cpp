@@ -64,7 +64,7 @@ DeviceType deviceTypeFromStr(std::string str)
     return DEVICE_GPU;
 }
 
-static inline nvinfer1::DeviceType deviceTypeToTRT(DeviceType type)
+nvinfer1::DeviceType deviceTypeToTRT(DeviceType type)
 {
     switch (type)
     {
@@ -118,7 +118,7 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
     // check for existence of cache
     if (!FileExists(cache_engine_path_))
     {
-        gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
+        gLogger.log(nvinfer1::ILogger::Severity::kWARNING,
             ("Cache file invalid, profiling model on device " + deviceTypeToStr(device)).c_str());
 
         // check for existence of model
@@ -243,186 +243,76 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, nvinfer1:
     // if( mEnableProfiler )
     //	context->setProfiler(&gProfiler);
 
-    // mMaxBatchSize = engine->getMaxBatchSize();
-
-    // LogInfo(LOG_TRT "\n");
-    // LogInfo(LOG_TRT "CUDA engine context initialized on device %s:\n", deviceTypeToStr(device));
-    // LogInfo(LOG_TRT "   -- layers       %i\n", engine->getNbLayers());
-    // LogInfo(LOG_TRT "   -- maxBatchSize %u\n", mMaxBatchSize);
-
-    // LogInfo(LOG_TRT "   -- deviceMemory %zu\n", engine->getDeviceMemorySize());
-    // LogInfo(LOG_TRT "   -- bindings     %i\n", engine->getNbBindings());
-
-    /*
-     * print out binding info
-     */
     const int numBindings = engine->getNbBindings();
 
     for (int n = 0; n < numBindings; n++)
     {
-        // LogInfo(LOG_TRT "   binding %i\n", n);
-
+        const int bind_index = n;
         const char* bind_name = engine->getBindingName(n);
-
-        // LogInfo("                -- index   %i\n", n);
-        // LogInfo("                -- name    '%s'\n", bind_name);
-        // LogInfo("                -- type    %s\n", dataTypeToStr(engine->getBindingDataType(n)));
-        // LogInfo("                -- in/out  %s\n", engine->bindingIsInput(n) ? "INPUT" : "OUTPUT");
-
         const nvinfer1::Dims bind_dims = engine->getBindingDimensions(n);
+        const bool is_input = engine->bindingIsInput(n);
 
-        // LogInfo("                -- # dims  %i\n", bind_dims.nbDims);
+        gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
+            ("Binding Nr.: " + std::to_string(bind_index) + "    Name: " + std::string(bind_name)
+                + "  Is input: " + std::to_string(is_input))
+                .c_str());
 
-        // for( int i=0; i < bind_dims.nbDims; i++ )
-        //	LogInfo("                -- dim #%i  %i\n", i, bind_dims.d[i]);
-    }
-
-    // LogInfo(LOG_TRT "\n");
-
-    /*
-     * setup network input buffers
-     */
-    /*
-    const int numInputs = input_blobs.size();
-
-    for( int n=0; n < numInputs; n++ )
-    {
-        const int inputIndex = engine->getBindingIndex(input_blobs[n].c_str());
-
-        if( inputIndex < 0 )
+        for (int i = 0; i < bind_dims.nbDims; i++)
         {
-            //LogError(LOG_TRT "failed to find requested input layer %s in network\n", input_blobs[n].c_str());
-            return false;
+            gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
+                ("    -- dim " + std::to_string(i) + "   " + std::to_string(bind_dims.d[i])).c_str());
         }
 
-        //LogVerbose(LOG_TRT "binding to input %i %s  binding index:  %i\n", n, input_blobs[n].c_str(), inputIndex);
-
-        nvinfer1::Dims inputDims = validateDims(engine->getBindingDimensions(inputIndex));
-
-        inputDims = shiftDims(inputDims);   // change NCHW to CHW if EXPLICIT_BATCH set
-
-
-        const size_t inputSize = mMaxBatchSize * sizeDims(inputDims) * sizeof(float);
-        //LogVerbose(LOG_TRT "binding to input %i %s  dims (b=%u c=%u h=%u w=%u) size=%zu\n", n, input_blobs[n].c_str(),
-    mMaxBatchSize, DIMS_C(inputDims), DIMS_H(inputDims), DIMS_W(inputDims), inputSize);
-
-        // allocate memory to hold the input buffer
-        void* inputCPU  = NULL;
-        void* inputCUDA = NULL;
-
-    #ifdef USE_INPUT_TENSOR_CUDA_DEVICE_MEMORY
-        if( CUDA_FAILED(cudaMalloc((void**)&inputCUDA, inputSize)) )
-        {
-            LogError(LOG_TRT "failed to alloc CUDA device memory for tensor input, %zu bytes\n", inputSize);
-            return false;
-        }
-
-        CUDA(cudaMemset(inputCUDA, 0, inputSize));
-    #else
-        if( !cudaAllocMapped((void**)&inputCPU, (void**)&inputCUDA, inputSize) )
-        {
-            //LogError(LOG_TRT "failed to alloc CUDA mapped memory for tensor input, %zu bytes\n", inputSize);
-            return false;
-        }
-    #endif
-
-        LayerInfo l;
-
-        l.CPU  = (float*)inputCPU;
-        l.CUDA = (float*)inputCUDA;
-        l.size = inputSize;
-        l.name = input_blobs[n];
-        l.binding = inputIndex;
-
-        //copyDims(&l.dims, &inputDims);
-        inputs_.push_back(l);
-    }
-
-
-
-    const int numOutputs = output_blobs.size();
-
-    for( int n=0; n < numOutputs; n++ )
-    {
-        const int outputIndex = engine->getBindingIndex(output_blobs[n].c_str());
-
-        if( outputIndex < 0 )
-        {
-            //LogError(LOG_TRT "failed to find requested output layer %s in network\n", output_blobs[n].c_str());
-            return false;
-        }
-
-        //LogVerbose(LOG_TRT "binding to output %i %s  binding index:  %i\n", n, output_blobs[n].c_str(), outputIndex);
-
-        nvinfer1::Dims outputDims = validateDims(engine->getBindingDimensions(outputIndex));
-
-        outputDims = shiftDims(outputDims);  // change NCHW to CHW if EXPLICIT_BATCH set
-
-
-        const size_t outputSize = mMaxBatchSize * sizeDims(outputDims) * sizeof(float);
-        //LogVerbose(LOG_TRT "binding to output %i %s  dims (b=%u c=%u h=%u w=%u) size=%zu\n", n,
-    output_blobs[n].c_str(), mMaxBatchSize, DIMS_C(outputDims), DIMS_H(outputDims), DIMS_W(outputDims), outputSize);
+        const size_t blobSize = sizeDims(bind_dims) * sizeof(float);
 
         // allocate output memory
-        void* outputCPU  = NULL;
+        void* outputCPU = NULL;
         void* outputCUDA = NULL;
 
-        //if( CUDA_FAILED(cudaMalloc((void**)&outputCUDA, outputSize)) )
-        if( !cudaAllocMapped((void**)&outputCPU, (void**)&outputCUDA, outputSize) )
+        if (!cudaAllocMapped((void**) &outputCPU, (void**) &outputCUDA, blobSize))
         {
-            //LogError(LOG_TRT "failed to alloc CUDA mapped memory for tensor output, %zu bytes\n", outputSize);
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR,
+                ("Failed to alloc CUDA mapped memory for tensor " + std::string(bind_name)).c_str());
+
             return false;
         }
 
         LayerInfo l;
 
-        l.CPU  = (float*)outputCPU;
-        l.CUDA = (float*)outputCUDA;
-        l.size = outputSize;
-        l.name = output_blobs[n];
-        l.binding = outputIndex;
+        l.CPU = (float*) outputCPU;
+        l.CUDA = (float*) outputCUDA;
+        l.size = blobSize;
+        l.name = bind_name;
+        l.binding = bind_index;
+        l.dims = bind_dims;
 
-        //copyDims(&l.dims, &);
-        outputs_.push_back(l);
+        if (is_input)
+            inputs_.push_back(l);
+        else
+            outputs_.push_back(l);
     }
-
 
     const int bindingSize = numBindings * sizeof(void*);
 
-    bindings_ = (void**)malloc(bindingSize);
+    bindings_ = (void**) malloc(bindingSize);
 
-    if( !bindings_ )
+    if (!bindings_)
     {
-        //LogError(LOG_TRT "failed to allocate %u bytes for bindings list\n", bindingSize);
+        gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to allocate memory for bindings!");
         return false;
     }
 
     memset(bindings_, 0, bindingSize);
 
-    for( uint32_t n=0; n < GetInputLayers(); n++ )
-        bindings_[mInputs[n].binding] = mInputs[n].CUDA;
-
-    for( uint32_t n=0; n < GetOutputLayers(); n++ )
-            bindings_[mOutputs[n].binding] = mOutputs[n].CUDA;
-
-    // find unassigned bindings and allocate them
-    for( uint32_t n=0; n < numBindings; n++ )
+    for (uint32_t n = 0; n < GetNumInputLayers(); n++)
     {
-        if( bindings_[n] != NULL )
-            continue;
-
-        const size_t bindingSize = sizeDims(validateDims(engine->getBindingDimensions(n))) * mMaxBatchSize *
-    sizeof(float);
-
-        if( CUDA_FAILED(cudaMalloc(&mBindings[n], bindingSize)) )
-        {
-            //LogError(LOG_TRT "failed to allocate %zu bytes for unused binding %u\n", bindingSize, n);
-            return false;
-        }
-
-        //(LOG_TRT "allocated %zu bytes for unused binding %u\n", bindingSize, n);
+        bindings_[inputs_[n].binding] = inputs_[n].CUDA;
     }
-    */
+
+    for (uint32_t n = 0; n < GetNumOutputLayers(); n++)
+    {
+        bindings_[outputs_[n].binding] = outputs_[n].CUDA;
+    }
 
     engine_ = engine;
     device_ = device;
@@ -628,7 +518,7 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
     return true;
 }
 
-inline bool TensorrtBase::FileExists(const std::string& name)
+bool TensorrtBase::FileExists(const std::string& name)
 {
     std::ifstream f(name.c_str());
     return f.good();
@@ -652,7 +542,17 @@ size_t TensorrtBase::fileSize(const std::string& path)
     return fileStat.st_size;
 }
 
-inline bool TensorrtBase::cudaAllocMapped(void** cpuPtr, void** gpuPtr, size_t size)
+size_t TensorrtBase::sizeDims(const nvinfer1::Dims& dims, const size_t elementSize)
+{
+    size_t sz = dims.d[0];
+
+    for (int n = 1; n < dims.nbDims; n++)
+        sz *= dims.d[n];
+
+    return sz * elementSize;
+}
+
+bool TensorrtBase::cudaAllocMapped(void** cpuPtr, void** gpuPtr, size_t size)
 {
     if (!cpuPtr || !gpuPtr || size == 0)
         return false;
@@ -668,8 +568,34 @@ inline bool TensorrtBase::cudaAllocMapped(void** cpuPtr, void** gpuPtr, size_t s
     return true;
 }
 
+uint32_t TensorrtBase::GetNumInputLayers() const
+{
+    return inputs_.size();
+}
+
+uint32_t TensorrtBase::GetNumOutputLayers() const
+{
+    return outputs_.size();
+}
+
 bool TensorrtBase::ProcessNetwork(bool sync)
 {
+    if (sync)
+    {
+        if (!context_->execute(1, bindings_))
+        {
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to execute TensorRT context!");
+            return false;
+        }
+    }
+    else
+    {
+        if (!context_->enqueue(1, bindings_, stream_, NULL))
+        {
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to enqueue TensorRT context!");
+            return false;
+        }
+    }
 
     return true;
 }
