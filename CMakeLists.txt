@@ -53,3 +53,12 @@ include_directories(
 add_library(${PROJECT_NAME}
   src/TensorrtBase.cpp
 )
+
+## Specify libraries to link a library or executable target against
+target_link_libraries(${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  nvinfer
+  nvinfer_plugin
+  nvonnxparser
+)
+
