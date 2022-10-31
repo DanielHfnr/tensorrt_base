@@ -6,16 +6,9 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <memory>
 #include <string.h> // memcpy
 #include <sys/stat.h>
-
-// Check for non-NULL pointer before freeing it, and then set the pointer to NULL.
-#define FREE_MEMORY(x)                                                                                                 \
-    if (x != nullptr)                                                                                                  \
-    {                                                                                                                  \
-        delete x;                                                                                                      \
-        x = nullptr;                                                                                                   \
-    }
 
 // Check for non-NULL pointer before freeing it, and then set the pointer to NULL.
 #define CUDA_FREE_HOST(x)                                                                                              \
@@ -91,23 +84,19 @@ nvinfer1::DeviceType deviceTypeToTRT(DeviceType type)
     }
 }
 
-TensorrtBase::TensorrtBase()
-    : engine_(nullptr)
-    , infer_(nullptr)
-    , context_(nullptr)
-    , stream_(nullptr)
-    , bindings_(nullptr)
-    , precision_(TYPE_FASTEST)
-    , device_(DEVICE_GPU)
-    , allow_gpu_fallback_(false)
+struct InferDeleter
 {
-}
+    template <typename T>
+    void operator()(T* obj) const
+    {
+        delete obj;
+    }
+};
+
+TensorrtBase::TensorrtBase() {}
 
 TensorrtBase::~TensorrtBase()
 {
-    FREE_MEMORY(engine_);
-    FREE_MEMORY(infer_);
-
     for (size_t n = 0; n < inputs_.size(); n++)
     {
         CUDA_FREE_HOST(inputs_[n].CUDA);
@@ -214,13 +203,14 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
     onnx_model_path_ = onnx_model_path;
     precision_ = precision;
     allow_gpu_fallback_ = allow_gpu_fallback;
+    device_ = device;
 
     return true;
 }
 
 bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceType device, cudaStream_t stream)
 {
-    nvinfer1::IRuntime* infer = nvinfer1::createInferRuntime(gLogger);
+    auto infer = std::unique_ptr<nvinfer1::IRuntime, InferDeleter>(nvinfer1::createInferRuntime(gLogger));
 
     if (!infer)
     {
@@ -241,7 +231,8 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
         infer->setDLACore(1);
     }
 
-    nvinfer1::ICudaEngine* engine = infer->deserializeCudaEngine(engine_stream, engine_size);
+    auto engine = std::unique_ptr<nvinfer1::ICudaEngine, InferDeleter>(
+        infer->deserializeCudaEngine(engine_stream, engine_size));
 
     if (!engine)
     {
@@ -253,9 +244,9 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
     if (!engine)
         return NULL;
 
-    nvinfer1::IExecutionContext* context = engine->createExecutionContext();
+    context_ = std::shared_ptr<nvinfer1::IExecutionContext>(engine->createExecutionContext(), InferDeleter());
 
-    if (!context)
+    if (!context_)
     {
         gLogger.log(nvinfer1::ILogger::Severity::kERROR,
             ("Failed to create execution context on device " + deviceTypeToStr(device)).c_str());
@@ -265,7 +256,7 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
     if (enable_debug_)
     {
         gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Enabling context debug sync...");
-        context->setDebugSync(true);
+        context_->setDebugSync(true);
     }
 
     // if( mEnableProfiler )
@@ -342,13 +333,8 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
         bindings_[outputs_[n].binding] = outputs_[n].CUDA;
     }
 
-    engine_ = engine;
-    device_ = device;
-    context_ = context;
-
     // SetStream(stream);	// set default device stream
 
-    infer_ = infer;
     return true;
 }
 
@@ -422,7 +408,7 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
         return false;
 
     // create builder and network definition interfaces
-    nvinfer1::IBuilder* builder = nvinfer1::createInferBuilder(gLogger);
+    auto builder = std::unique_ptr<nvinfer1::IBuilder, InferDeleter>(nvinfer1::createInferBuilder(gLogger));
 
     if (!builder)
     {
@@ -430,8 +416,8 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
         return false;
     }
 
-    nvinfer1::INetworkDefinition* network
-        = builder->createNetworkV2(1U << (uint32_t) nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto network = std::unique_ptr<nvinfer1::INetworkDefinition, InferDeleter>(
+        builder->createNetworkV2(1U << (uint32_t) nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH));
 
     if (!network)
     {
@@ -441,7 +427,7 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
 
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Parsing model file " + onnx_model_file).c_str());
 
-    nvonnxparser::IParser* parser = nvonnxparser::createParser(*network, gLogger);
+    auto parser = std::unique_ptr<nvonnxparser::IParser, InferDeleter>(nvonnxparser::createParser(*network, gLogger));
 
     if (!parser)
     {
@@ -458,7 +444,7 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
     }
 
     // configure the builder
-    nvinfer1::IBuilderConfig* builder_config = builder->createBuilderConfig();
+    auto builder_config = std::unique_ptr<nvinfer1::IBuilderConfig, InferDeleter>(builder->createBuilderConfig());
 
     builder_config->setAvgTimingIterations(2);
 
@@ -496,7 +482,9 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
     // build CUDA engine
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Building serialized network, this may take a while...");
 
-    nvinfer1::IHostMemory* serialize_memory = builder->buildSerializedNetwork(*network, *builder_config);
+    auto serialize_memory = std::unique_ptr<nvinfer1::IHostMemory, InferDeleter>(
+        builder->buildSerializedNetwork(*network, *builder_config));
+
     if (!serialize_memory)
     {
         gLogger.log(nvinfer1::ILogger::Severity::kERROR,
@@ -521,9 +509,6 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
 
     *engine_stream = engine_memory;
     *engine_size = serialize_size;
-
-    delete builder;
-    delete network;
 
     return true;
 }

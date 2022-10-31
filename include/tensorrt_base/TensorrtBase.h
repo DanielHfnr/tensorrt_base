@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -174,19 +175,17 @@ protected:
     inline uint32_t GetNumOutputLayers() const;
 
 protected:
-    nvinfer1::IRuntime* infer_;
-    nvinfer1::ICudaEngine* engine_;
-    nvinfer1::IExecutionContext* context_;
+    std::shared_ptr<nvinfer1::IExecutionContext> context_{nullptr};
 
     std::string onnx_model_path_;
     std::string cache_engine_path_;
-    PrecisionType precision_;
-    DeviceType device_;
-    bool allow_gpu_fallback_;
-    bool enable_debug_;
-    void** bindings_;
+    PrecisionType precision_{TYPE_FASTEST};
+    DeviceType device_{DEVICE_GPU};
+    bool allow_gpu_fallback_{false};
+    bool enable_debug_{false};
+    void** bindings_{nullptr};
 
-    cudaStream_t stream_;
+    cudaStream_t stream_{nullptr};
 
     struct LayerInfo
     {
