@@ -96,14 +96,13 @@ protected:
     //!
     //! \param engine_stream
     //! \param engine_size
-    //! \param pluginFactory
+    //! \param plugin_factory
     //! \param device
     //! \param stream
     //!
     //! \return
     //!
-    bool LoadEngine(char* engine_stream, size_t engine_size, nvinfer1::IPluginFactory* pluginFactory, DeviceType device,
-        cudaStream_t stream);
+    bool LoadEngine(char* engine_stream, size_t engine_size, DeviceType device, cudaStream_t stream);
 
     //!
     //! \brief
@@ -137,7 +136,7 @@ protected:
     //!
     //! \return
     //!
-    size_t fileSize(const std::string& path);
+    size_t FileSize(const std::string& path);
 
     //!
     //! \brief
@@ -148,20 +147,30 @@ protected:
     //!
     //! \return
     //!
-    inline bool cudaAllocMapped(void** cpuPtr, void** gpuPtr, size_t size);
+    inline bool CudaAllocMapped(void** cpu_ptr, void** gpu_ptr, size_t size);
 
     //!
     //! \brief
     //!
     //! \param dims
-    //! \param elementSize
+    //! \param element_size
     //!
     //! \return
     //!
-    inline size_t sizeDims(const nvinfer1::Dims& dims, const size_t elementSize = 1);
+    inline size_t SizeDims(const nvinfer1::Dims& dims, const size_t element_size = 1);
 
+    //!
+    //! \brief
+    //!
+    //! \return
+    //!
     inline uint32_t GetNumInputLayers() const;
 
+    //!
+    //! \brief
+    //!
+    //! \return
+    //!
     inline uint32_t GetNumOutputLayers() const;
 
 protected:
@@ -178,7 +187,6 @@ protected:
     void** bindings_;
 
     cudaStream_t stream_;
-    uint32_t workspace_size_;
 
     struct LayerInfo
     {
