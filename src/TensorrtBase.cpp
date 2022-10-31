@@ -10,14 +10,6 @@
 #include <string.h> // memcpy
 #include <sys/stat.h>
 
-// Check for non-NULL pointer before freeing it, and then set the pointer to NULL.
-#define CUDA_FREE_HOST(x)                                                                                              \
-    if (x != nullptr)                                                                                                  \
-    {                                                                                                                  \
-        cudaFreeHost(x);                                                                                               \
-        x = nullptr;                                                                                                   \
-    }
-
 std::string precisionTypeToStr(PrecisionType type)
 {
     switch (type)
@@ -111,7 +103,7 @@ TensorrtBase::~TensorrtBase()
 }
 
 bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device,
-    bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator)
+    bool allow_gpu_fallback, cudaStream_t cuda_stream, nvinfer1::IInt8Calibrator* calibrator)
 {
     // TODO: Implement checks if everythin is filled correctly
 
@@ -188,7 +180,7 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
 
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Device loaded model file " + onnx_model_path).c_str());
 
-    if (!LoadEngine(engine_stream, engine_size, device, cudaStreamDefault))
+    if (!LoadEngine(engine_stream, engine_size, device))
     {
         gLogger.log(nvinfer1::ILogger::Severity::kERROR,
             ("Failed to create TensorRT engine on device " + deviceTypeToStr(device) + " from " + onnx_model_path)
@@ -204,11 +196,12 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
     precision_ = precision;
     allow_gpu_fallback_ = allow_gpu_fallback;
     device_ = device;
+    stream_ = cuda_stream;
 
     return true;
 }
 
-bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceType device, cudaStream_t stream)
+bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceType device)
 {
     auto infer = std::unique_ptr<nvinfer1::IRuntime, InferDeleter>(nvinfer1::createInferRuntime(gLogger));
 
@@ -332,8 +325,6 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
     {
         bindings_[outputs_[n].binding] = outputs_[n].CUDA;
     }
-
-    // SetStream(stream);	// set default device stream
 
     return true;
 }

@@ -9,6 +9,14 @@
 
 #include <NvInfer.h>
 
+// Check for non-NULL pointer before freeing it, and then set the pointer to NULL.
+#define CUDA_FREE_HOST(x)                                                                                              \
+    if (x != nullptr)                                                                                                  \
+    {                                                                                                                  \
+        cudaFreeHost(x);                                                                                               \
+        x = nullptr;                                                                                                   \
+    }
+
 enum PrecisionType
 {
     TYPE_DISABLED = 0, //!< Unknown, unspecified, or disabled type
@@ -64,12 +72,13 @@ public:
     //! \param precision
     //! \param device
     //! \param allow_gpu_fallback
+    //! \param cuda_stream
     //! \param calibrator
     //!
     //! \return
     //!
     bool LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device, bool allow_gpu_fallback,
-        nvinfer1::IInt8Calibrator* calibrator = nullptr);
+        cudaStream_t cuda_stream, nvinfer1::IInt8Calibrator* calibrator = nullptr);
 
     //!
     //! \brief
@@ -99,11 +108,10 @@ protected:
     //! \param engine_size
     //! \param plugin_factory
     //! \param device
-    //! \param stream
     //!
     //! \return
     //!
-    bool LoadEngine(char* engine_stream, size_t engine_size, DeviceType device, cudaStream_t stream);
+    bool LoadEngine(char* engine_stream, size_t engine_size, DeviceType device);
 
     //!
     //! \brief
