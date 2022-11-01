@@ -65,141 +65,137 @@ public:
     ~TensorrtBase();
 
     //!
-    //! \brief
+    //! \brief Load a new network instance of a onnx model
     //!
-    //! \param onnx_model_path
-    //! \param precision
-    //! \param device
-    //! \param allow_gpu_fallback
-    //! \param calibrator
+    //! \param onnx_model_path Filepath to the onnx model file
+    //! \param precision Precision that should be used for engine created (FP32, FP16, INF8)
+    //! \param device Device where the engine should be running on (GPU, DLA etc.)
+    //! \param allow_gpu_fallback Boolean in GPU fallback should be allow for certain layers.
+    //! \param calibrator Instance of a INT8 calibrator
     //!
-    //! \return
+    //! \return True if loading was successfull, Fals if not
     //!
     bool LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device, bool allow_gpu_fallback,
         nvinfer1::IInt8Calibrator* calibrator = nullptr);
 
     //!
-    //! \brief
+    //! \brief Runs inference on the created execution context
     //!
-    //! \param sync
+    //! \param sync Boolean flag if inference should be synchronously (Blocking execution)
+    //! \note If sync is set to false, then a cuda stream needs to be created and set.
     //!
-    //! \return
+    //! \return True if inference was successfull, False if not
     //!
     bool ProcessNetwork(bool sync = true);
 
 protected:
     //!
-    //! \brief
+    //! \brief Load a serialized engine plan file into memory.
     //!
-    //! \param filename
-    //! \param stream
-    //! \param size
+    //! \param filename Filepath to the .engine file
+    //! \param engine_stream Engine stream
+    //! \param engine_size Size of Engine in bytes
     //!
     //! \return
     //!
     bool LoadEngine(std::string filename, char** stream, size_t* size);
 
     //!
-    //! \brief
+    //! \brief Load a network instance from a serialized engine plan file.
     //!
-    //! \param engine_stream
-    //! \param engine_size
-    //! \param plugin_factory
-    //! \param device
+    //! \param engine_stream Engine stream
+    //! \param engine_size Size of Engine in bytes
+    //! \param device Device where the engine should be running on (GPU, DLA etc.)
     //!
-    //! \return
+    //! \return True if loading was successfull, False if not
     //!
     bool LoadEngine(char* engine_stream, size_t engine_size, DeviceType device);
 
     //!
-    //! \brief
+    //! \brief Create and output an optimized network model
     //!
-    //! \param onnx_model_file
-    //! \param precision
-    //! \param device
-    //! \param allow_gpu_fallback
-    //! \param calibrator
-    //! \param engine_stream
-    //! \param engine_size
+    //! \note this function is automatically used by LoadNetwork, but also can be used individually to perform the
+    //! network operations offline.
     //!
-    //! \return
+    //! \param onnx_model_path Filepath to the onnx model file
+    //! \param precision Precision that should be used for engine created (FP32, FP16, INF8)
+    //! \param device Device where the engine should be running on (GPU, DLA etc.)
+    //! \param allow_gpu_fallback Boolean in GPU fallback should be allow for certain layers.
+    //! \param calibrator Instance of a INT8 calibrator
+    //! \param engine_stream Engine stream
+    //! \param engine_size Size of Engine in bytes
+    //!
+    //! \return True if profiling was successfull, False if not
     //!
     bool ProfileModel(const std::string& onnx_model_file, PrecisionType precision, DeviceType device,
         bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator, char** engine_stream, size_t* engine_size);
 
     //!
-    //! \brief
+    //! \brief Checks if a file exists on filesystem
     //!
-    //! \param name
+    //! \param path Filepath to the file
     //!
-    //! \return
+    //! \return True of file exists, False if not
     //!
-    inline bool FileExists(const std::string& name);
+    inline bool FileExists(const std::string& path);
 
     //!
-    //! \brief
+    //! \brief Calculates the file size in bytes
     //!
-    //! \param path
+    //! \param path Filepath to the file
     //!
-    //! \return
+    //! \return Size in bytes. 0 bytes if file not found or error opening.
     //!
     size_t FileSize(const std::string& path);
 
     //!
-    //! \brief
+    //! \brief Allocate ZeroCopy mapped memory, shared between CUDA and CPU.
     //!
-    //! \param cpuPtr
-    //! \param gpuPtr
-    //! \param size
+    //! \note Although two pointers are returned, one for CPU and GPU, they both resolve to the same physical memory.
     //!
-    //! \return
+    //! \param cpuPtr Returned CPU pointer to the shared memory.
+    //! \param gpuPtr Returned GPU pointer to the shared memory.
+    //! \param size Size (in bytes) of the shared memory to allocate.
+    //!
+    //! \return `true` if the allocation succeeded, `false` otherwise.
     //!
     inline bool CudaAllocMapped(void** cpu_ptr, void** gpu_ptr, size_t size);
 
     //!
-    //! \brief
+    //! \brief Calculates the volume of the layer (all dimension sizes multiplied with each other)
     //!
-    //! \param dims
-    //! \param element_size
+    //! \param dims Dimensions of the layer
     //!
-    //! \return
+    //! \return Calculated volume of the layer
     //!
-    inline size_t SizeDims(const nvinfer1::Dims& dims, const size_t element_size = 1);
+    inline size_t CalculateVolume(const nvinfer1::Dims& dims);
 
     //!
-    //! \brief
-    //!
-    //! \return
+    //! \brief Returns the number of input layers in the model
     //!
     inline uint32_t GetNumInputLayers() const;
 
     //!
-    //! \brief
-    //!
-    //! \return
+    //! \brief Returns the number of output layers in the model
     //!
     inline uint32_t GetNumOutputLayers() const;
 
     //!
-    //! \brief
+    //! \brief Creates a new CUDA stream with or without arguments
     //!
-    //! \param nonBlocking
+    //! \param nonBlocking Flag if stream should be create with non blocking flag
     //!
-    //! \return
+    //! \return Created CUDA stream
     //!
     cudaStream_t CreateStream(bool nonBlocking);
 
     //!
-    //! \brief
-    //!
-    //! \param stream
+    //! \brief Sets the CUDA stream to be used
     //!
     void SetStream(const cudaStream_t stream);
 
     //!
-    //! \brief
-    //!
-    //! \return
+    //! \brief Returns the current CUDA stream
     //!
     cudaStream_t GetStream() const;
 

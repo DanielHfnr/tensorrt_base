@@ -270,9 +270,9 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
                 ("    -- dim " + std::to_string(i) + "   " + std::to_string(bind_dims.d[i])).c_str());
         }
 
-        const size_t blob_size = SizeDims(bind_dims) * sizeof(float);
+        const size_t blob_size = CalculateVolume(bind_dims) * sizeof(float);
 
-        gLogger.log(nvinfer1::ILogger::Severity::kWARNING,
+        gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
             ("Alloc CUDA mapped memory for tensor with size (bytes): " + std::to_string(blob_size)).c_str());
 
         // allocate output memory
@@ -502,9 +502,9 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
     return true;
 }
 
-bool TensorrtBase::FileExists(const std::string& name)
+bool TensorrtBase::FileExists(const std::string& path)
 {
-    std::ifstream f(name.c_str());
+    std::ifstream f(path.c_str());
     return f.good();
 }
 
@@ -526,14 +526,14 @@ size_t TensorrtBase::FileSize(const std::string& path)
     return file_stat.st_size;
 }
 
-size_t TensorrtBase::SizeDims(const nvinfer1::Dims& dims, const size_t element_size)
+size_t TensorrtBase::CalculateVolume(const nvinfer1::Dims& dims)
 {
     size_t sz = dims.d[0];
 
     for (int n = 1; n < dims.nbDims; n++)
         sz *= dims.d[n];
 
-    return sz * element_size;
+    return sz;
 }
 
 bool TensorrtBase::CudaAllocMapped(void** cpu_ptr, void** gpu_ptr, size_t size)
