@@ -20,7 +20,6 @@
 enum PrecisionType
 {
     TYPE_DISABLED = 0, //!< Unknown, unspecified, or disabled type
-    TYPE_FASTEST,      //!< The fastest detected precision should be use (i.e. try INT8, then FP16, then FP32)
     TYPE_FP32,         //!< 32-bit floating-point precision (FP32)
     TYPE_FP16,         //!< 16-bit floating-point half precision (FP16)
     TYPE_INT8,         //!< 8-bit integer precision (INT8)
@@ -72,13 +71,12 @@ public:
     //! \param precision
     //! \param device
     //! \param allow_gpu_fallback
-    //! \param cuda_stream
     //! \param calibrator
     //!
     //! \return
     //!
     bool LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device, bool allow_gpu_fallback,
-        cudaStream_t cuda_stream, nvinfer1::IInt8Calibrator* calibrator = nullptr);
+        nvinfer1::IInt8Calibrator* calibrator = nullptr);
 
     //!
     //! \brief
@@ -182,33 +180,59 @@ protected:
     //!
     inline uint32_t GetNumOutputLayers() const;
 
+    //!
+    //! \brief
+    //!
+    //! \param nonBlocking
+    //!
+    //! \return
+    //!
+    cudaStream_t CreateStream(bool nonBlocking);
+
+    //!
+    //! \brief
+    //!
+    //! \param stream
+    //!
+    void SetStream(const cudaStream_t stream);
+
+    //!
+    //! \brief
+    //!
+    //! \return
+    //!
+    cudaStream_t GetStream() const;
+
 protected:
-    std::shared_ptr<nvinfer1::IExecutionContext> context_{nullptr};
+    std::shared_ptr<nvinfer1::IExecutionContext> context_{nullptr}; //!< TensorRT execution context
+    std::shared_ptr<nvinfer1::ICudaEngine> engine_{nullptr};        //!< TensorRT engine
 
-    std::string onnx_model_path_;
-    std::string cache_engine_path_;
-    PrecisionType precision_{TYPE_FASTEST};
-    DeviceType device_{DEVICE_GPU};
-    bool allow_gpu_fallback_{false};
-    bool enable_debug_{false};
-    void** bindings_{nullptr};
+    std::string onnx_model_path_;        //!< Filepath to the ONNX model given to the LoadNetwork function
+    std::string cache_engine_path_;      //!< Constructed filepath from onnx model name and meta data like trt version
+    PrecisionType precision_{TYPE_FP32}; //!< Precision for which the network will be built (FP32, FP16, INT8)
+    DeviceType device_{DEVICE_GPU};      //!< Device where the trt engine will be executed
+    bool allow_gpu_fallback_{false};     //!< If certain layers arent available e.g on DLA fallback to GPU
+    bool enable_debug_{false};           //!< Boolean flag if debug sync is enabled on execution context
+    void** bindings_{nullptr};           //!< Bindings of the trt engine (inputs, outputs)
+    cudaStream_t stream_{nullptr};       //!< Current CUDA stream
 
-    cudaStream_t stream_{nullptr};
-
+    //!
+    //! \brief
+    //!
     struct LayerInfo
     {
-        std::string name;
-        nvinfer1::Dims dims;
-        uint32_t size;
-        uint32_t binding;
-        float* CPU;
-        float* CUDA;
+        std::string name;    //!< Name of the layer as specified in the ONNX model
+        nvinfer1::Dims dims; //!< Dimensions of the layer in NCHW
+        uint32_t size;       //!< Size of the input/output blob in bytes
+        uint32_t binding;    //!< Binding index
+        float* CPU;          //!< CPU pointer to the cuda mapped memory
+        float* CUDA;         //!< GPU pointer to the cuda mapped memory
     };
 
     std::vector<LayerInfo> inputs_;  //!< Vector of all input blobs
     std::vector<LayerInfo> outputs_; //!< Vector of all output blobs
 
-    Logger gLogger;
+    Logger gLogger; //!< TensorrRT logger class
 };
 
 #endif

@@ -15,7 +15,6 @@ std::string precisionTypeToStr(PrecisionType type)
     switch (type)
     {
     case TYPE_DISABLED: return "DISABLED";
-    case TYPE_FASTEST: return "FASTEST";
     case TYPE_FP32: return "FP32";
     case TYPE_FP16: return "FP16";
     case TYPE_INT8: return "INT8";
@@ -103,7 +102,7 @@ TensorrtBase::~TensorrtBase()
 }
 
 bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device,
-    bool allow_gpu_fallback, cudaStream_t cuda_stream, nvinfer1::IInt8Calibrator* calibrator)
+    bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator)
 {
     // TODO: Implement checks if everythin is filled correctly
 
@@ -196,7 +195,6 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
     precision_ = precision;
     allow_gpu_fallback_ = allow_gpu_fallback;
     device_ = device;
-    stream_ = cuda_stream;
 
     return true;
 }
@@ -224,20 +222,17 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
         infer->setDLACore(1);
     }
 
-    auto engine = std::unique_ptr<nvinfer1::ICudaEngine, InferDeleter>(
-        infer->deserializeCudaEngine(engine_stream, engine_size));
+    engine_ = std::shared_ptr<nvinfer1::ICudaEngine>(
+        infer->deserializeCudaEngine(engine_stream, engine_size), InferDeleter());
 
-    if (!engine)
+    if (!engine_)
     {
         gLogger.log(nvinfer1::ILogger::Severity::kERROR,
             ("Failed to create CUDA engine on device " + deviceTypeToStr(device)).c_str());
         return false;
     }
 
-    if (!engine)
-        return NULL;
-
-    context_ = std::shared_ptr<nvinfer1::IExecutionContext>(engine->createExecutionContext(), InferDeleter());
+    context_ = std::shared_ptr<nvinfer1::IExecutionContext>(engine_->createExecutionContext(), InferDeleter());
 
     if (!context_)
     {
@@ -255,14 +250,14 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
     // if( mEnableProfiler )
     //	context->setProfiler(&gProfiler);
 
-    const int num_bindings = engine->getNbBindings();
+    const int num_bindings = engine_->getNbBindings();
 
     for (int n = 0; n < num_bindings; n++)
     {
         const int bind_index = n;
-        const char* bind_name = engine->getBindingName(n);
-        const nvinfer1::Dims bind_dims = engine->getBindingDimensions(n);
-        const bool is_input = engine->bindingIsInput(n);
+        const char* bind_name = engine_->getBindingName(n);
+        const nvinfer1::Dims bind_dims = engine_->getBindingDimensions(n);
+        const bool is_input = engine_->bindingIsInput(n);
 
         gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
             ("Binding Nr.: " + std::to_string(bind_index) + "    Name: " + std::string(bind_name)
@@ -276,6 +271,9 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
         }
 
         const size_t blob_size = SizeDims(bind_dims) * sizeof(float);
+
+        gLogger.log(nvinfer1::ILogger::Severity::kWARNING,
+            ("Alloc CUDA mapped memory for tensor with size (bytes): " + std::to_string(blob_size)).c_str());
 
         // allocate output memory
         void* output_cpu = NULL;
@@ -552,6 +550,31 @@ bool TensorrtBase::CudaAllocMapped(void** cpu_ptr, void** gpu_ptr, size_t size)
     memset(*cpu_ptr, 0, size);
 
     return true;
+}
+
+cudaStream_t TensorrtBase::CreateStream(bool nonBlocking)
+{
+    uint32_t flags = cudaStreamDefault;
+
+    if (nonBlocking)
+        flags = cudaStreamNonBlocking;
+
+    cudaStream_t stream = nullptr;
+
+    if (cudaStreamCreateWithFlags(&stream, flags) != cudaSuccess)
+        return nullptr;
+
+    return stream;
+}
+
+void TensorrtBase::SetStream(const cudaStream_t stream)
+{
+    stream_ = stream;
+}
+
+cudaStream_t TensorrtBase::GetStream() const
+{
+    return stream_;
 }
 
 uint32_t TensorrtBase::GetNumInputLayers() const
