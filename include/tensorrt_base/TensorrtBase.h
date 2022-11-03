@@ -35,6 +35,29 @@ enum DeviceType
     NUM_DEVICES                //!< Number of device types defined
 };
 
+//!
+//! \brief Function that returns a string from precisionType
+//!
+std::string precisionTypeToStr(PrecisionType type);
+
+//!
+//! \brief Function converts a string into precisionType
+//!
+PrecisionType precisionTypeFromStr(std::string str);
+
+//!
+//! \brief Function that returns a string from deviceType
+//!
+std::string deviceTypeToStr(DeviceType type);
+
+//!
+//! \brief Function that converts a string into deviceType
+//!
+DeviceType deviceTypeFromStr(std::string str);
+
+//!
+//! \brief TesnorRT logger class
+//!
 class Logger : public nvinfer1::ILogger
 {
 public:
@@ -58,6 +81,9 @@ public:
     }
 };
 
+//!
+//! \brief Abstract base class for loading ONNX networks and convert them into TensorRT engine and run inference.
+//!
 class TensorrtBase
 {
 public:
