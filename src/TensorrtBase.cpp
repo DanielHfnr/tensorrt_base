@@ -88,14 +88,16 @@ TensorrtBase::TensorrtBase() {}
 
 TensorrtBase::~TensorrtBase()
 {
-    for (size_t n = 0; n < inputs_.size(); n++)
+    for (const auto& kv : inputs_)
     {
-        CUDA_FREE_HOST(inputs_[n].CUDA);
+        LayerInfo layer_info = kv.second;
+        CUDA_FREE_HOST(layer_info.CUDA);
     }
 
-    for (size_t n = 0; n < outputs_.size(); n++)
+    for (const auto& kv : outputs_)
     {
-        CUDA_FREE_HOST(outputs_[n].CUDA);
+        LayerInfo layer_info = kv.second;
+        CUDA_FREE_HOST(layer_info.CUDA);
     }
 
     free(bindings_);
@@ -297,9 +299,13 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
         l.dims = bind_dims;
 
         if (is_input)
-            inputs_.push_back(l);
+        {
+            inputs_.emplace(bind_name, l);
+        }
         else
-            outputs_.push_back(l);
+        {
+            outputs_.emplace(bind_name, l);
+        }
     }
 
     const int binding_size = num_bindings * sizeof(void*);
@@ -314,14 +320,16 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
 
     memset(bindings_, 0, binding_size);
 
-    for (uint32_t n = 0; n < GetNumInputLayers(); n++)
+    for (const auto& kv : inputs_)
     {
-        bindings_[inputs_[n].binding] = inputs_[n].CUDA;
+        LayerInfo layer_info = kv.second;
+        bindings_[layer_info.binding] = layer_info.CUDA;
     }
 
-    for (uint32_t n = 0; n < GetNumOutputLayers(); n++)
+    for (const auto& kv : outputs_)
     {
-        bindings_[outputs_[n].binding] = outputs_[n].CUDA;
+        LayerInfo layer_info = kv.second;
+        bindings_[layer_info.binding] = layer_info.CUDA;
     }
 
     return true;
@@ -335,7 +343,6 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
     char* engine_stream = NULL;
     size_t engine_size = 0;
 
-    // LogInfo(LOG_TRT "loading network plan from engine cache... %s\n", filename);
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Loading model plan from engine cache " + filename).c_str());
 
     // determine the file size of the engine
@@ -575,6 +582,34 @@ void TensorrtBase::SetStream(const cudaStream_t stream)
 cudaStream_t TensorrtBase::GetStream() const
 {
     return stream_;
+}
+
+nvinfer1::Dims TensorrtBase::GetInputDims(std::string input_layer_name) const
+{
+    if (!input_layer_name.empty())
+    {
+        // Ensure the key is in the map before accessing it
+        if (inputs_.count(input_layer_name))
+        {
+            return inputs_.find(input_layer_name)->second.dims;
+        }
+    }
+
+    return nvinfer1::Dims{};
+}
+
+nvinfer1::Dims TensorrtBase::GetOutputDims(std::string output_layer_name) const
+{
+    if (!output_layer_name.empty())
+    {
+        // Ensure the key is in the map before accessing it
+        if (outputs_.count(output_layer_name))
+        {
+            return outputs_.find(output_layer_name)->second.dims;
+        }
+    }
+
+    return nvinfer1::Dims{};
 }
 
 uint32_t TensorrtBase::GetNumInputLayers() const
