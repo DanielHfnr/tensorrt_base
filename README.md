@@ -15,6 +15,8 @@ This repository contains a ROS catkin package as a library with a C++ base class
 - Install CUDA: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
 - Install TensorRT: https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html
 
+Follow the instructions to install ROS, CUDA and TensorRT.
+
 **Optional:**
 
 Install clang-format for code formatting: 
