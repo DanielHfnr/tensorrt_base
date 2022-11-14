@@ -151,24 +151,16 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
             ("Network profiling completed, saving engine to " + cache_engine_path_).c_str());
 
         // write the cache file
-        FILE* cache_file = NULL;
-        cache_file = fopen(cache_engine_path_.c_str(), "wb");
+        std::ofstream cache_file(cache_engine_path_, std::ios::binary);
 
-        if (cache_file != NULL)
-        {
-            if (fwrite(engine_stream, 1, engine_size, cache_file) != engine_size)
-            {
-                gLogger.log(nvinfer1::ILogger::Severity::kERROR,
-                    ("Failed to write engine cache file " + cache_engine_path_).c_str());
-            }
-
-            fclose(cache_file);
-        }
-        else
+        if (!cache_file)
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR,
                 ("Failed to open engine cache file for writing: " + cache_engine_path_).c_str());
+            return false;
         }
+
+        cache_file.write(static_cast<char*>(engine_stream), engine_size);
 
         gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Completed saving engine...");
     }
@@ -349,6 +341,7 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
     if (!engine_file.good())
     {
         gLogger.log(nvinfer1::ILogger::Severity::kERROR, ("Failed to open engine file: " + filename).c_str());
+        return false;
     }
 
     // Check the size of the file
@@ -378,6 +371,7 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
     if (!engine_file.good())
     {
         gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to read engine cache file");
+        return false;
     }
 
     engine_file.close();
