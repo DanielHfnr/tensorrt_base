@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -225,6 +226,20 @@ protected:
     //!
     cudaStream_t GetStream() const;
 
+    //!
+    //! \brief Returns the dimension of a certain input layer
+    //!
+    //! \param input_layer_name Name of the input layer
+    //!
+    nvinfer1::Dims GetInputDims(std::string input_layer_name) const;
+
+    //!
+    //! \brief Returns the dimension of a certain output layer
+    //!
+    //! \param output_layer_name Name of the output layer
+    //!
+    nvinfer1::Dims GetOutputDims(std::string output_layer_name) const;
+
 protected:
     std::shared_ptr<nvinfer1::IExecutionContext> context_{nullptr}; //!< TensorRT execution context
     std::shared_ptr<nvinfer1::ICudaEngine> engine_{nullptr};        //!< TensorRT engine
@@ -251,8 +266,10 @@ protected:
         float* CUDA;         //!< GPU pointer to the cuda mapped memory
     };
 
-    std::vector<LayerInfo> inputs_;  //!< Vector of all input blobs
-    std::vector<LayerInfo> outputs_; //!< Vector of all output blobs
+    // std::vector<LayerInfo> inputs_;  //!< Vector of all input blobs
+    // std::vector<LayerInfo> outputs_; //!< Vector of all output blobs
+    std::map<std::string, LayerInfo> inputs_;
+    std::map<std::string, LayerInfo> outputs_;
 
     Logger gLogger; //!< TensorrRT logger class
 };
