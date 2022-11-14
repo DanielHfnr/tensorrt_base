@@ -167,15 +167,6 @@ protected:
     inline bool FileExists(const std::string& path);
 
     //!
-    //! \brief Calculates the file size in bytes
-    //!
-    //! \param path Filepath to the file
-    //!
-    //! \return Size in bytes. 0 bytes if file not found or error opening.
-    //!
-    size_t FileSize(const std::string& path);
-
-    //!
     //! \brief Allocate ZeroCopy mapped memory, shared between CUDA and CPU.
     //!
     //! \note Although two pointers are returned, one for CPU and GPU, they both resolve to the same physical memory.
@@ -266,10 +257,8 @@ protected:
         float* CUDA;         //!< GPU pointer to the cuda mapped memory
     };
 
-    // std::vector<LayerInfo> inputs_;  //!< Vector of all input blobs
-    // std::vector<LayerInfo> outputs_; //!< Vector of all output blobs
-    std::map<std::string, LayerInfo> inputs_;
-    std::map<std::string, LayerInfo> outputs_;
+    std::map<std::string, LayerInfo> inputs_;  //!< Map of all input blobs
+    std::map<std::string, LayerInfo> outputs_; //!< Map of all output blobs
 
     Logger gLogger; //!< TensorrRT logger class
 };

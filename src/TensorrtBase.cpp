@@ -8,7 +8,6 @@
 #include <cuda_runtime.h>
 #include <memory>
 #include <string.h> // memcpy
-#include <sys/stat.h>
 
 std::string precisionTypeToStr(PrecisionType type)
 {
@@ -345,8 +344,17 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
 
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Loading model plan from engine cache " + filename).c_str());
 
-    // determine the file size of the engine
-    engine_size = FileSize(filename);
+    std::ifstream engine_file(filename, std::ios::binary);
+
+    if (!engine_file.good())
+    {
+        gLogger.log(nvinfer1::ILogger::Severity::kERROR, ("Failed to open engine file: " + filename).c_str());
+    }
+
+    // Check the size of the file
+    engine_file.seekg(0, std::ifstream::end);
+    engine_size = engine_file.tellg();
+    engine_file.seekg(0, std::ifstream::beg);
 
     if (engine_size == 0)
     {
@@ -365,30 +373,14 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
         return false;
     }
 
-    // open the engine cache file from disk
-    FILE* cache_file = NULL;
-    cache_file = fopen(filename.c_str(), "rb");
+    engine_file.read(reinterpret_cast<char*>(engine_stream), engine_size);
 
-    if (!cache_file)
+    if (!engine_file.good())
     {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR, ("Failed to open engine cache file " + filename).c_str());
-        return false;
+        gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to read engine cache file");
     }
 
-    // read the serialized engine into memory
-    const size_t bytes_read = fread(engine_stream, 1, engine_size, cache_file);
-
-    if (bytes_read != engine_size)
-    {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR,
-            ("Only read " + std::to_string(bytes_read) + "/" + std::to_string(engine_size)
-                + " bytes of engine cache file " + filename)
-                .c_str());
-        return false;
-    }
-
-    // close the plan cache
-    fclose(cache_file);
+    engine_file.close();
 
     *stream = engine_stream;
     *size = engine_size;
@@ -513,24 +505,6 @@ bool TensorrtBase::FileExists(const std::string& path)
 {
     std::ifstream f(path.c_str());
     return f.good();
-}
-
-size_t TensorrtBase::FileSize(const std::string& path)
-{
-    if (path.size() == 0)
-        return 0;
-
-    struct stat file_stat;
-
-    const int result = stat(path.c_str(), &file_stat);
-
-    if (result == -1)
-    {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR, (path + " does not exist!").c_str());
-        return 0;
-    }
-
-    return file_stat.st_size;
 }
 
 size_t TensorrtBase::CalculateVolume(const nvinfer1::Dims& dims)
