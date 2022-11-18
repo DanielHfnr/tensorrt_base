@@ -112,13 +112,12 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
     bool plugins_loaded = initLibNvInferPlugins(&gLogger, "");
 
     if (!plugins_loaded)
+    {
+        // TODO: Return if failed?
         gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to load NVIDIA plugins.");
-    else
-        gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Completed loading NVIDIA plugins.");
+    }
 
-    // Try to load engine
-    char* engine_stream = NULL;
-    size_t engine_size = 0;
+    gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Completed loading NVIDIA plugins.");
 
     std::string cache_prefix = onnx_model_path + "." + std::to_string((uint32_t) allow_gpu_fallback) + "."
         + std::to_string(NV_TENSORRT_VERSION) + "." + deviceTypeToStr(device) + "." + precisionTypeToStr(precision);
@@ -138,51 +137,30 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
             return false;
         }
 
-        // parse the model and profile the engine
-        if (!ProfileModel(
-                onnx_model_path, precision, device, allow_gpu_fallback, calibrator, &engine_stream, &engine_size))
+        // parse the model and profile the engine, afterwards save engine to disk
+        if (!ProfileModel(onnx_model_path, precision, device, allow_gpu_fallback, calibrator))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR,
                 ("Device %s failed to load model %s!", deviceTypeToStr(device), onnx_model_path).c_str());
             return false;
         }
-
-        gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
-            ("Network profiling completed, saving engine to " + cache_engine_path_).c_str());
-
-        // write the cache file
-        std::ofstream cache_file(cache_engine_path_, std::ios::binary);
-
-        if (!cache_file)
-        {
-            gLogger.log(nvinfer1::ILogger::Severity::kERROR,
-                ("Failed to open engine cache file for writing: " + cache_engine_path_).c_str());
-            return false;
-        }
-
-        cache_file.write(static_cast<char*>(engine_stream), engine_size);
-
-        gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Completed saving engine...");
-    }
-    else
-    {
-        if (!LoadEngine(cache_engine_path_, &engine_stream, &engine_size))
-            return false;
     }
 
-    gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Device loaded model file " + onnx_model_path).c_str());
+    std::vector<char> engine_blob;
 
-    if (!LoadEngine(engine_stream, engine_size, device))
+    if (!DeserializeEngine(cache_engine_path_, engine_blob))
     {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR,
-            ("Failed to create TensorRT engine on device " + deviceTypeToStr(device) + " from " + onnx_model_path)
-                .c_str());
+        return false;
+    }
+
+    if (!CreateInferenceEngine(engine_blob, device))
+    {
         return false;
     }
 
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Successfully initialized model...");
 
-    free(engine_stream); // not used anymore
+    // free(engine_stream); // not used anymore
 
     onnx_model_path_ = onnx_model_path;
     precision_ = precision;
@@ -192,7 +170,7 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
     return true;
 }
 
-bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceType device)
+bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceType device)
 {
     auto infer = std::unique_ptr<nvinfer1::IRuntime, InferDeleter>(nvinfer1::createInferRuntime(gLogger));
 
@@ -216,7 +194,7 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
     }
 
     engine_ = std::shared_ptr<nvinfer1::ICudaEngine>(
-        infer->deserializeCudaEngine(engine_stream, engine_size), InferDeleter());
+        infer->deserializeCudaEngine(engine_blob.data(), engine_blob.size()), InferDeleter());
 
     if (!engine_)
     {
@@ -326,13 +304,12 @@ bool TensorrtBase::LoadEngine(char* engine_stream, size_t engine_size, DeviceTyp
     return true;
 }
 
-bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
+bool TensorrtBase::DeserializeEngine(std::string filename, std::vector<char>& engine_blob)
 {
-    if (filename.empty() || !stream || !size)
+    if (filename.empty())
+    {
         return false;
-
-    char* engine_stream = NULL;
-    size_t engine_size = 0;
+    }
 
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Loading model plan from engine cache " + filename).c_str());
 
@@ -346,7 +323,7 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
 
     // Check the size of the file
     engine_file.seekg(0, std::ifstream::end);
-    engine_size = engine_file.tellg();
+    size_t engine_size = engine_file.tellg();
     engine_file.seekg(0, std::ifstream::beg);
 
     if (engine_size == 0)
@@ -356,17 +333,8 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
         return false;
     }
 
-    // allocate memory to hold the engine
-    engine_stream = (char*) malloc(engine_size);
-
-    if (!engine_stream)
-    {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR,
-            ("Failed to allocate " + std::to_string(engine_size) + "bytes").c_str());
-        return false;
-    }
-
-    engine_file.read(reinterpret_cast<char*>(engine_stream), engine_size);
+    engine_blob.resize(engine_size);
+    engine_file.read(engine_blob.data(), engine_size);
 
     if (!engine_file.good())
     {
@@ -376,19 +344,14 @@ bool TensorrtBase::LoadEngine(std::string filename, char** stream, size_t* size)
 
     engine_file.close();
 
-    *stream = engine_stream;
-    *size = engine_size;
+    gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Device loaded model file " + filename).c_str());
 
     return true;
 }
 
-bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for model
-    PrecisionType precision, DeviceType device, bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator,
-    char** engine_stream, size_t* engine_size) // output stream for the GIE model
+bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, PrecisionType precision, DeviceType device,
+    bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator)
 {
-    if (!engine_stream || !engine_size)
-        return false;
-
     // create builder and network definition interfaces
     auto builder = std::unique_ptr<nvinfer1::IBuilder, InferDeleter>(nvinfer1::createInferBuilder(gLogger));
 
@@ -474,23 +437,10 @@ bool TensorrtBase::ProfileModel(const std::string& onnx_model_file, // name for 
         return false;
     }
 
-    const char* serialize_data = (char*) serialize_memory->data();
-    const size_t serialize_size = serialize_memory->size();
-
-    // allocate memory to store the bitstream
-    char* engine_memory = (char*) malloc(serialize_size);
-
-    if (!engine_memory)
+    if (!SerializeEngine(serialize_memory->data(), serialize_memory->size()))
     {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR,
-            ("Failed to allocate " + std::to_string(serialize_size) + " bytes to store CUDA engine").c_str());
         return false;
     }
-
-    memcpy(engine_memory, serialize_data, serialize_size);
-
-    *engine_stream = engine_memory;
-    *engine_size = serialize_size;
 
     return true;
 }
@@ -499,6 +449,27 @@ bool TensorrtBase::FileExists(const std::string& path)
 {
     std::ifstream f(path.c_str());
     return f.good();
+}
+
+bool TensorrtBase::SerializeEngine(void* data, size_t size)
+{
+    gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, ("Serializing engine to " + cache_engine_path_).c_str());
+
+    // write the cache file
+    std::ofstream cache_file(cache_engine_path_, std::ios::binary);
+
+    if (!cache_file)
+    {
+        gLogger.log(nvinfer1::ILogger::Severity::kERROR,
+            ("Failed to open engine cache file for writing: " + cache_engine_path_).c_str());
+        return false;
+    }
+
+    cache_file.write(static_cast<char*>(data), size);
+    cache_file.close();
+    gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Completed saving engine...");
+
+    return true;
 }
 
 size_t TensorrtBase::CalculateVolume(const nvinfer1::Dims& dims)

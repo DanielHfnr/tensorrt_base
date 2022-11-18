@@ -120,23 +120,21 @@ protected:
     //! \brief Load a serialized engine plan file into memory.
     //!
     //! \param filename Filepath to the .engine file
-    //! \param engine_stream Engine stream
-    //! \param engine_size Size of Engine in bytes
+    //! \param engine_blob Serialized Engine stream
     //!
     //! \return
     //!
-    bool LoadEngine(std::string filename, char** stream, size_t* size);
+    bool DeserializeEngine(std::string filename, std::vector<char>& engine_blob);
 
     //!
     //! \brief Load a network instance from a serialized engine plan file.
     //!
-    //! \param engine_stream Engine stream
-    //! \param engine_size Size of Engine in bytes
-    //! \param device Device where the engine should be running on (GPU, DLA etc.)
+    //! \param engine_blob Deserialized Engine stream
+    //! \param device Device type where engine should be create (GPU, DLA etc.)
     //!
     //! \return True if loading was successfull, False if not
     //!
-    bool LoadEngine(char* engine_stream, size_t engine_size, DeviceType device);
+    bool CreateInferenceEngine(std::vector<char>& engine_blob, DeviceType device);
 
     //!
     //! \brief Create and output an optimized network model
@@ -149,13 +147,11 @@ protected:
     //! \param device Device where the engine should be running on (GPU, DLA etc.)
     //! \param allow_gpu_fallback Boolean in GPU fallback should be allow for certain layers.
     //! \param calibrator Instance of a INT8 calibrator
-    //! \param engine_stream Engine stream
-    //! \param engine_size Size of Engine in bytes
     //!
     //! \return True if profiling was successfull, False if not
     //!
     bool ProfileModel(const std::string& onnx_model_file, PrecisionType precision, DeviceType device,
-        bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator, char** engine_stream, size_t* engine_size);
+        bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator);
 
     //!
     //! \brief Checks if a file exists on filesystem
@@ -230,6 +226,14 @@ protected:
     //! \param output_layer_name Name of the output layer
     //!
     nvinfer1::Dims GetOutputDims(std::string output_layer_name) const;
+
+    //!
+    //! \brief Serializes a loaded inference engine
+    //!
+    //! \param data Pointer to memory which should be serialized
+    //! \param size Size of the data to be serialized
+    //!
+    bool SerializeEngine(void* data, size_t size);
 
 protected:
     std::shared_ptr<nvinfer1::IExecutionContext> context_{nullptr}; //!< TensorRT execution context
