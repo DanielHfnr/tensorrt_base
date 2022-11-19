@@ -527,7 +527,7 @@ bool TensorrtBase::CudaCopyFromDevice(void* dst, const void* src, size_t count, 
     if (stream)
     {
         // Copy async
-        if (cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToDevice, stream) != cudaSuccess)
+        if (cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToHost, stream) != cudaSuccess)
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to copy from device!");
             return false;
@@ -536,7 +536,7 @@ bool TensorrtBase::CudaCopyFromDevice(void* dst, const void* src, size_t count, 
     else
     {
         // Copy sync
-        if (cudaMemcpy(dst, src, count, cudaMemcpyDeviceToDevice) != cudaSuccess)
+        if (cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost) != cudaSuccess)
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to copy from!");
             return false;
@@ -559,16 +559,6 @@ cudaStream_t TensorrtBase::CreateStream(bool nonBlocking)
         return nullptr;
 
     return stream;
-}
-
-void TensorrtBase::SetStream(const cudaStream_t stream)
-{
-    stream_ = stream;
-}
-
-cudaStream_t TensorrtBase::GetStream() const
-{
-    return stream_;
 }
 
 nvinfer1::Dims TensorrtBase::GetInputDims(std::string input_layer_name) const
@@ -609,9 +599,9 @@ uint32_t TensorrtBase::GetNumOutputLayers() const
     return outputs_.size();
 }
 
-bool TensorrtBase::ProcessNetwork(bool sync)
+bool TensorrtBase::ProcessNetwork(cudaStream_t stream)
 {
-    if (sync)
+    if (stream == nullptr)
     {
         if (!context_->executeV2(bindings_))
         {
@@ -621,7 +611,7 @@ bool TensorrtBase::ProcessNetwork(bool sync)
     }
     else
     {
-        if (!context_->enqueueV2(bindings_, stream_, NULL))
+        if (!context_->enqueueV2(bindings_, stream, NULL))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to enqueue TensorRT context!");
             return false;

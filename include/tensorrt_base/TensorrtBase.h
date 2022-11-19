@@ -1,6 +1,8 @@
 #ifndef TENSORRTBASE_H
 #define TENSORRTBASE_H
 
+#include <cuda.h>
+#include <cuda_runtime.h>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -108,12 +110,12 @@ public:
     //!
     //! \brief Runs inference on the created execution context
     //!
-    //! \param sync Boolean flag if inference should be synchronously (Blocking execution)
-    //! \note If sync is set to false, then a cuda stream needs to be created and set.
+    //! \param stream With cuda stream given, inference should be asynchronously (non blocking execution). And needs to
+    //! be synchronized afterwards. If not give, inference will be blocking until done.
     //!
     //! \return True if inference was successfull, False if not
     //!
-    bool ProcessNetwork(bool sync = true);
+    bool ProcessNetwork(cudaStream_t stream = nullptr);
 
 protected:
     //!
@@ -185,7 +187,7 @@ protected:
     //!
     //! \return True if copy was successful, false if not
     //!
-    inline bool CudaCopyToDevice(void* dst, const void* src, size_t count, cudaStream_t stream = nullptr);
+    bool CudaCopyToDevice(void* dst, const void* src, size_t count, cudaStream_t stream = nullptr);
 
     //!
     //! \brief Copies memory from device to host
@@ -197,7 +199,7 @@ protected:
     //!
     //! \return True if copy was successful, false if not
     //!
-    inline bool CudaCopyFromDevice(void* dst, const void* src, size_t count, cudaStream_t stream = nullptr);
+    bool CudaCopyFromDevice(void* dst, const void* src, size_t count, cudaStream_t stream = nullptr);
 
     //!
     //! \brief Calculates the volume of the layer (all dimension sizes multiplied with each other)
@@ -226,16 +228,6 @@ protected:
     //! \return Created CUDA stream
     //!
     cudaStream_t CreateStream(bool nonBlocking);
-
-    //!
-    //! \brief Sets the CUDA stream to be used
-    //!
-    void SetStream(const cudaStream_t stream);
-
-    //!
-    //! \brief Returns the current CUDA stream
-    //!
-    cudaStream_t GetStream() const;
 
     //!
     //! \brief Returns the dimension of a certain input layer
@@ -270,7 +262,6 @@ protected:
     bool allow_gpu_fallback_{false};     //!< If certain layers arent available e.g on DLA fallback to GPU
     bool enable_debug_{false};           //!< Boolean flag if debug sync is enabled on execution context
     void** bindings_{nullptr};           //!< Bindings of the trt engine (inputs, outputs)
-    cudaStream_t stream_{nullptr};       //!< Current CUDA stream
 
     //!
     //! \brief
