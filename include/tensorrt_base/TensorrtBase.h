@@ -176,6 +176,30 @@ protected:
     inline bool CudaAllocMapped(void** cpu_ptr, void** gpu_ptr, size_t size);
 
     //!
+    //! \brief Copies memory from host to device
+    //!
+    //! \param dst Pointer to destination memory
+    //! \param src pointer to source memory
+    //! \param count Size in bytes
+    //! \param stream Cuda stream. Copies asynchronously if stream is set. Otherwise blocking cudaMemCpy
+    //!
+    //! \return True if copy was successful, false if not
+    //!
+    inline bool CudaCopyToDevice(void* dst, const void* src, size_t count, cudaStream_t stream = nullptr);
+
+    //!
+    //! \brief Copies memory from device to host
+    //!
+    //! \param dst Pointer to destination memory
+    //! \param src pointer to source memory
+    //! \param count Size in bytes
+    //! \param stream Cuda stream. Copies asynchronously if stream is set. Otherwise blocking cudaMemCpy
+    //!
+    //! \return True if copy was successful, false if not
+    //!
+    inline bool CudaCopyFromDevice(void* dst, const void* src, size_t count, cudaStream_t stream = nullptr);
+
+    //!
     //! \brief Calculates the volume of the layer (all dimension sizes multiplied with each other)
     //!
     //! \param dims Dimensions of the layer

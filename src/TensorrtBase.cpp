@@ -498,6 +498,54 @@ bool TensorrtBase::CudaAllocMapped(void** cpu_ptr, void** gpu_ptr, size_t size)
     return true;
 }
 
+bool TensorrtBase::CudaCopyToDevice(void* dst, const void* src, size_t count, cudaStream_t stream)
+{
+    if (stream)
+    {
+        // Copy async
+        if (cudaMemcpyAsync(dst, src, count, cudaMemcpyHostToDevice, stream) != cudaSuccess)
+        {
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to copy to device!");
+            return false;
+        }
+    }
+    else
+    {
+        // Copy sync
+        if (cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice) != cudaSuccess)
+        {
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to copy to device!");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TensorrtBase::CudaCopyFromDevice(void* dst, const void* src, size_t count, cudaStream_t stream)
+{
+    if (stream)
+    {
+        // Copy async
+        if (cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToDevice, stream) != cudaSuccess)
+        {
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to copy from device!");
+            return false;
+        }
+    }
+    else
+    {
+        // Copy sync
+        if (cudaMemcpy(dst, src, count, cudaMemcpyDeviceToDevice) != cudaSuccess)
+        {
+            gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to copy from!");
+            return false;
+        }
+    }
+
+    return true;
+}
+
 cudaStream_t TensorrtBase::CreateStream(bool nonBlocking)
 {
     uint32_t flags = cudaStreamDefault;
