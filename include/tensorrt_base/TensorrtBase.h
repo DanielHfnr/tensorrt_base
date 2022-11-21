@@ -272,8 +272,8 @@ protected:
         nvinfer1::Dims dims; //!< Dimensions of the layer in NCHW
         uint32_t size;       //!< Size of the input/output blob in bytes
         uint32_t binding;    //!< Binding index
-        float* CPU;          //!< CPU pointer to the cuda mapped memory
-        float* CUDA;         //!< GPU pointer to the cuda mapped memory
+        void* CPU;           //!< CPU pointer to the cuda mapped memory
+        void* CUDA;          //!< GPU pointer to the cuda mapped memory
     };
 
     std::map<std::string, LayerInfo> inputs_;  //!< Map of all input blobs

@@ -228,11 +228,11 @@ bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceT
         const int bind_index = n;
         const char* bind_name = engine_->getBindingName(n);
         const nvinfer1::Dims bind_dims = engine_->getBindingDimensions(n);
-        const bool is_input = engine_->bindingIsInput(n);
+        const bool bind_is_input = engine_->bindingIsInput(n);
 
         gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE,
             ("Binding Nr.: " + std::to_string(bind_index) + "    Name: " + std::string(bind_name)
-                + "  Is input: " + std::to_string(is_input))
+                + "  Is input: " + std::to_string(bind_is_input))
                 .c_str());
 
         for (int i = 0; i < bind_dims.nbDims; i++)
@@ -260,14 +260,14 @@ bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceT
 
         LayerInfo l;
 
-        l.CPU = (float*) output_cpu;
-        l.CUDA = (float*) output_cuda;
+        l.CPU = output_cpu;
+        l.CUDA = output_cuda;
         l.size = blob_size;
         l.name = bind_name;
         l.binding = bind_index;
         l.dims = bind_dims;
 
-        if (is_input)
+        if (bind_is_input)
         {
             inputs_.emplace(bind_name, l);
         }
