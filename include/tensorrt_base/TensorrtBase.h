@@ -261,7 +261,7 @@ protected:
     DeviceType device_{DEVICE_GPU};      //!< Device where the trt engine will be executed
     bool allow_gpu_fallback_{false};     //!< If certain layers arent available e.g on DLA fallback to GPU
     bool enable_debug_{false};           //!< Boolean flag if debug sync is enabled on execution context
-    void** bindings_{nullptr};           //!< Bindings of the trt engine (inputs, outputs)
+    std::vector<void*> bindings_{};      //!< Bindings of the trt engine (inputs, outputs)
 
     //!
     //! \brief

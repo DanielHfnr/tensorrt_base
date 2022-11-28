@@ -98,14 +98,16 @@ TensorrtBase::~TensorrtBase()
         LayerInfo layer_info = kv.second;
         CUDA_FREE_HOST(layer_info.CUDA);
     }
-
-    free(bindings_);
 }
 
 bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device,
     bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator)
 {
-    // TODO: Implement checks if everythin is filled correctly
+    if (onnx_model_path.empty())
+    {
+        gLogger.log(nvinfer1::ILogger::Severity::kERROR, "ONNX model empty!");
+        return false;
+    }
 
     // Check if plugins are loaded correctly
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Loading NVIDIA plugins...");
@@ -113,7 +115,7 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
 
     if (!plugins_loaded)
     {
-        // TODO: Return if failed?
+        // Return if failed?
         gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to load NVIDIA plugins.");
     }
 
@@ -222,6 +224,7 @@ bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceT
     //	context->setProfiler(&gProfiler);
 
     const int num_bindings = engine_->getNbBindings();
+    bindings_.resize(num_bindings);
 
     for (int n = 0; n < num_bindings; n++)
     {
@@ -247,10 +250,10 @@ bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceT
             ("Alloc CUDA mapped memory for tensor with size (bytes): " + std::to_string(blob_size)).c_str());
 
         // allocate output memory
-        void* output_cpu = NULL;
-        void* output_cuda = NULL;
+        void* output_cpu = nullptr;
+        void* output_cuda = nullptr;
 
-        if (!CudaAllocMapped((void**) &output_cpu, (void**) &output_cuda, blob_size))
+        if (!CudaAllocMapped(static_cast<void**>(&output_cpu), static_cast<void**>(&output_cuda), blob_size))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR,
                 ("Failed to alloc CUDA mapped memory for tensor " + std::string(bind_name)).c_str());
@@ -275,30 +278,8 @@ bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceT
         {
             outputs_.emplace(bind_name, l);
         }
-    }
 
-    const int binding_size = num_bindings * sizeof(void*);
-
-    bindings_ = (void**) malloc(binding_size);
-
-    if (!bindings_)
-    {
-        gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to allocate memory for bindings!");
-        return false;
-    }
-
-    memset(bindings_, 0, binding_size);
-
-    for (const auto& kv : inputs_)
-    {
-        LayerInfo layer_info = kv.second;
-        bindings_[layer_info.binding] = layer_info.CUDA;
-    }
-
-    for (const auto& kv : outputs_)
-    {
-        LayerInfo layer_info = kv.second;
-        bindings_[layer_info.binding] = layer_info.CUDA;
+        bindings_[n] = l.CUDA;
     }
 
     return true;
@@ -603,7 +584,7 @@ bool TensorrtBase::ProcessNetwork(cudaStream_t stream)
 {
     if (stream == nullptr)
     {
-        if (!context_->executeV2(bindings_))
+        if (!context_->executeV2(bindings_.data()))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to execute TensorRT context!");
             return false;
@@ -611,7 +592,7 @@ bool TensorrtBase::ProcessNetwork(cudaStream_t stream)
     }
     else
     {
-        if (!context_->enqueueV2(bindings_, stream, NULL))
+        if (!context_->enqueueV2(bindings_.data(), stream, nullptr))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to enqueue TensorRT context!");
             return false;
