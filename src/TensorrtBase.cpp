@@ -105,7 +105,11 @@ TensorrtBase::~TensorrtBase()
 bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precision, DeviceType device,
     bool allow_gpu_fallback, nvinfer1::IInt8Calibrator* calibrator)
 {
-    // TODO: Implement checks if everythin is filled correctly
+    if (onnx_model_path.empty())
+    {
+        gLogger.log(nvinfer1::ILogger::Severity::kERROR, "ONNX model empty!");
+        return false;
+    }
 
     // Check if plugins are loaded correctly
     gLogger.log(nvinfer1::ILogger::Severity::kVERBOSE, "Loading NVIDIA plugins...");
@@ -113,7 +117,7 @@ bool TensorrtBase::LoadNetwork(std::string onnx_model_path, PrecisionType precis
 
     if (!plugins_loaded)
     {
-        // TODO: Return if failed?
+        // Return if failed?
         gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to load NVIDIA plugins.");
     }
 
