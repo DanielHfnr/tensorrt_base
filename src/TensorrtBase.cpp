@@ -250,10 +250,10 @@ bool TensorrtBase::CreateInferenceEngine(std::vector<char>& engine_blob, DeviceT
             ("Alloc CUDA mapped memory for tensor with size (bytes): " + std::to_string(blob_size)).c_str());
 
         // allocate output memory
-        void* output_cpu = NULL;
-        void* output_cuda = NULL;
+        void* output_cpu = nullptr;
+        void* output_cuda = nullptr;
 
-        if (!CudaAllocMapped((void**) &output_cpu, (void**) &output_cuda, blob_size))
+        if (!CudaAllocMapped(static_cast<void**>(&output_cpu), static_cast<void**>(&output_cuda), blob_size))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR,
                 ("Failed to alloc CUDA mapped memory for tensor " + std::string(bind_name)).c_str());
@@ -592,7 +592,7 @@ bool TensorrtBase::ProcessNetwork(cudaStream_t stream)
     }
     else
     {
-        if (!context_->enqueueV2(bindings_.data(), stream, NULL))
+        if (!context_->enqueueV2(bindings_.data(), stream, nullptr))
         {
             gLogger.log(nvinfer1::ILogger::Severity::kERROR, "Failed to enqueue TensorRT context!");
             return false;
